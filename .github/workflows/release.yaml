@@ -1,9 +1,7 @@
 name: Release
 on:
   push:
-    branches: [main]
-    tags:
-      - "v*"
+    branches: [main, python3.11]
   workflow_dispatch:
 
 env:
@@ -21,7 +19,7 @@ jobs:
 
       - uses: actions/setup-python@v4
         with:
-          python-version: '3.12'
+          python-version: '3.11'
 
       - uses: actions/setup-node@v3.8.1
 
@@ -33,12 +31,18 @@ jobs:
           override: true
           target: wasm32-wasi
 
-      - name: Cache CPython
-        id: cache-cpython-wasi
+      - name: Setup `wasmtime`
+        uses: bytecodealliance/actions/wasmtime/setup@v1
+
+      - name: Run `wasmtime version`
+        run: "wasmtime --version"
+
+      - name: Cache CPython 3.11
+        id: cache-cpython3-11-wasi
         uses: actions/cache@v3
         with:
           path: cpython/builddir/wasi
-          key: cpython-wasi
+          key: cpython3-11-wasi
           enableCrossOsArchive: true
 
       - name: Build
@@ -51,40 +55,8 @@ jobs:
             name: wasi-wheels
             path: build/*-wasi.tar.gz
 
-      - name: Upload binary to Github release (tag)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Upload binary to Github release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: build/*-wasi.tar.gz
-          tag: ${{ github.ref }}
-
-  update_canary_release:
-    name: Update canary release
-    needs: release
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download release assets
-        uses: actions/download-artifact@v3
-        with:
-            name: wasi-wheels
-
-      - name: Delete canary tag
-        uses: dev-drprasad/delete-tag-and-release@v0.2.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: canary
-
-      - uses: "marvinpinto/action-automatic-releases@latest"
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "latest"
-          prerelease: true
-          title: "Development Build"
-          files: |
-            *.tar.gz
-            *.txt
-            *.whl
-        if: github.ref == 'refs/heads/main'
